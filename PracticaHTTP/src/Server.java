@@ -11,7 +11,6 @@ public class Server{
         static class Manejador extends Thread{
             int codeNumber = 200;
             String response = "OK";
-            String contentType = "text/html";
             String path = "src/ContenidoServer/";
             protected Socket socket;
             protected PrintWriter pw;
@@ -20,24 +19,18 @@ public class Server{
             protected DataInputStream dis;
             protected String FileName = "";
             protected Dictionary<String, String> MIME = new Hashtable<String, String>();
-            protected final String headerHTTP = "HTTP/1.1 "+ codeNumber +" "+response+"\n"
-                                                + "Date: "+new Date()+"\n"
-                                                + "Server: EGZ_KYF Server/1.0\n"
-                                                + "Content-Type: "+contentType+" \n";
-            protected final String deleteHTTP_Ok = headerHTTP+"\n"
-                                                + "<html><head><meta charset='UTF-8'><title>"+codeNumber+"  </title></head>"
+            protected String deleteHtml_Ok ="<html><head><meta charset='UTF-8'><title>"+codeNumber+"  </title></head>"
                                                 + "<body><h1>  </h1>"
                                                 + "<p>Elemento: "+ FileName +" fue eliminado exitosamente mediante DELETE</p>"
                                                 + "</body></html>";
-            protected final String E404 = "HTTP/1.1 404 Not Found\n"
+            protected String E404 = "HTTP/1.1 404 Not Found\n"
                                         + "Date: "+new Date()+"\n"
                                         + "Server: EGZ_KYF Server/1.0\n"
                                         + "Content-Type: text/html \n\n"
                     + "<html><head><meta charset='UTF-8'><title>404 NOT FOUND  </title></head>"
                     + "<body><h1> Puede tratarse de una página eliminada que no tiene reemplazo o equivalente"
                     + " o se trata de una página que simplemente no existe </h1>"
-                    + "<p>Elemento: "+ FileName +" NO EXISTE O FUE ELIMINADO</p>"
-                    + "</body></html>";
+                    ;
             protected final String E500 = "<html><head><meta charset='UTF-8'><title>500 INTERNAL SERVER ERROR  </title></head>"
                                         + "<body><h1> UPS, OCURRIÓ UN ERROR INESPERADO</h1>"
                                         + "<p>No se pudo concretar la operación</p>"
@@ -98,11 +91,20 @@ public class Server{
                     }
                     else if (linea.toUpperCase().startsWith("POST"))
                     {
+                        System.out.println("Recibiendo POST...");
                         int tam = dis.available(); // Se lee el tamaño del flujo de entrada para saber que tamaño tiene que leer
                         byte[] b = new byte[tam];//Se inicia un arreglo de bytes con el tamaño obtenido
                         dis.read(b);//Se leen los datos
-                        String request = new String(b, 0, tam);
+                        String request;
+                        if(linea.contains("=")){
+                            request = linea;
+                        }else{
+                            request = new String(b, 0, tam);
+                        }
+
                         String htmlPost = POST(request);// Se manda a llamar la función POST recuperando una String que representa la respuesta
+                        System.out.println("Respuesta:");
+                        System.out.println(htmlPost);
                         pw.println(htmlPost);
                         pw.flush();
                         bos.flush();
@@ -137,13 +139,20 @@ public class Server{
                             System.out.println("Petición de eliminado de: "+ FileName +"   ha sido exitosa.");
                             this.codeNumber = 200;
                             this.response = "OK";
-                            this.contentType = "text/html";
-                            pw.println(deleteHTTP_Ok);
+                            String contentType = "text/html";
+                            String headerHTTP = "HTTP/1.1 "+ 200 +" "+"OK"+"\n"
+                                    + "Date: "+new Date()+"\n"
+                                    + "Server: EGZ_KYF Server/1.0\n"
+                                    + "Content-Type: "+contentType+" \n\n";
+                            pw.println(headerHTTP+deleteHtml_Ok);
                             pw.flush();
                         }else{//Si no fue posible eliminarlo:
-                            this.codeNumber = 500;
-                            this.response = "Internal Server Error";
-                            this.contentType = "text/html";
+
+                            String contentType = "text/html";
+                            String headerHTTP = "HTTP/1.1 "+ 500 +" "+"Internal Server Error"+"\n"
+                                    + "Date: "+new Date()+"\n"
+                                    + "Server: EGZ_KYF Server/1.0\n"
+                                    + "Content-Type: "+contentType+" \n";
                             pw.println(headerHTTP+"\n"+E500);//Se actualizan los parámetros anteriores y envía encabezado y http con mensaje.
                             pw.flush();
                         }
@@ -151,8 +160,8 @@ public class Server{
                         System.out.println("Petición de eliminado de: "+FileName+"   ha fracasado. NO SE ENCONTRÓ");
                         this.codeNumber = 404;
                         this.response = "Not Found";
-                        this.contentType = "text/html";
-                        pw.println(E404);//Se envía la String E404 que contiene encabezado y texto http
+                        pw.println(E404+ "<p>Elemento: "+ FileName +" NO EXISTE O FUE ELIMINADO</p>"
+                                + "</body></html>");//Se envía la String E404 que contiene encabezado y texto http
                         pw.flush();
                     }
                     pw.flush();
@@ -169,9 +178,11 @@ public class Server{
                             System.out.println("Petición de lectura de: " + FileName + "   ha sido exitosa.");
                         } else {//Si hubo un error en el enviado del archivo solicitado:
                             System.out.println("Petición de lectura de: " + FileName + "   ha fracasado.");
-                            this.codeNumber = 500; // Error del servidor
-                            this.response = "Internal Server Error";
-                            this.contentType = "text/html";
+                            String contentType = "text/html";
+                            String headerHTTP = "HTTP/1.1 "+ 500 +" "+"Internal Server Error"+"\n"
+                                    + "Date: "+new Date()+"\n"
+                                    + "Server: EGZ_KYF Server/1.0\n"
+                                    + "Content-Type: "+contentType+" \n";
                             pw.println(headerHTTP+"\n"+E500);//Se manda el encabezado actualizado y html de Error 500
                             pw.flush();
                         }
@@ -188,12 +199,24 @@ public class Server{
                 }
             }//END of Method GET....
             public String POST(String request) {
+                int indice = request.indexOf("/");
+                if(request.contains("/")){
+                    if(request.contains("?"))
+                        request = request.substring(indice+2);
+                    else
+                        request = request.substring(indice+1);
+                    StringTokenizer post = new StringTokenizer(request," ");
+                    request = post.nextToken();
+                }
                 String[] reqLineas = request.split("\n");
-                StringTokenizer tokens = new StringTokenizer(reqLineas[reqLineas.length-1], "&");
+                StringTokenizer tokens = new StringTokenizer(reqLineas[reqLineas.length-1], "&?");
+                System.out.println(reqLineas[reqLineas.length-1]);
 
-                this.codeNumber = 200; // Error del servidor
-                this.response = "OK";
-                this.contentType = "text/html";
+                String contentType = "text/html";
+                String headerHTTP = "HTTP/1.1 "+ "200" +" "+"OK"+"\n"
+                        + "Date: "+new Date()+"\n"
+                        + "Server: EGZ_KYF Server/1.0\n"
+                        + "Content-Type: "+contentType+" \n\n";
                 String html = headerHTTP // encabezado http con los valores actualizados:
                         + "<html><head><meta charset='UTF-8'><title> Método POST </title></head>\n"
                         + "<body ><center><h2> Se han obtenido los siguientes valores con sus respectivos parámetros</h2><br>\n"
@@ -201,6 +224,7 @@ public class Server{
 
                 while (tokens.hasMoreTokens()) {
                     String postValues = tokens.nextToken();
+                    System.out.println(postValues);
                     StringTokenizer postValue = new StringTokenizer(postValues, "=");
                     String parametro = ""; //Parámetro
                     String valor = ""; //Valor
@@ -216,34 +240,49 @@ public class Server{
                 return html;
             }
             public void HEAD(String linea)throws Exception{
-                if (!linea.contains("?")) {
-                    getFileName(linea);//Se actualiza el FileName según la linea de petición recibida
-                    File file = new File(path+FileName);
-                    if(!file.exists()){//Si el archivo no existe:
-                        this.FileName = "page404.html";
-                        this.codeNumber = 404;
-                        this.response = "Not Found";
-                        this.contentType = "text/html";
-                        pw.println(E404);//Se manda el encabezado y texto html de Error 404
-                        pw.flush();
-                    } else if (file.isDirectory()){//Si se está intentando acceder a un directorio:
+                getFileName(linea);
+                File file = new File(path+FileName);
+                if (!linea.contains("?")||file.exists()) {
+                    //Se actualiza el FileName según la línea de petición recibida
+                    if (file.isDirectory()){//Si se está intentando acceder a un directorio:
                         this.FileName = "page403.html";
-                        this.codeNumber = 403;
-                        this.response = "Forbidden\n";
-                        this.contentType = "text/html";
+                        int codeNumber = 403;
+                        String response = "Forbidden\n";
+                        String contentType = "text/html";
+                        String headerHTTP = "HTTP/1.1 "+ codeNumber +" "+response+"\n"
+                                + "Date: "+new Date()+"\n"
+                                + "Server: EGZ_KYF Server/1.0\n"
+                                + "Content-Type: "+contentType+" \n";
                         pw.println(headerHTTP+"\n"+E403);//Se manda el encabezado actualizado y la sección html Error 403
                     }else{//Si el archivo existe: se mandan los encabezados actualizando el tipo de archivo
                         int posExt = FileName.indexOf(".")+1;
                         String ext = FileName.substring(posExt);
-                        this.contentType = MIME.get(ext);
+                        String contentType = MIME.get(ext);
+                        String headerHTTP = "HTTP/1.1 "+ codeNumber +" "+response+"\n"
+                                + "Date: "+new Date()+"\n"
+                                + "Server: EGZ_KYF Server/1.0\n"
+                                + "Content-Type: "+contentType+" \n";
                         pw.println(headerHTTP+"Content-Length: " + file.length() +" \n\n");//Se añade fileLength al encabezado
+                        System.out.println(headerHTTP+"Content-Length: " + file.length() +" \n\n");
                     }
 
-                } else { // Si la línea contiene: "?"
+                }else if(!file.exists()){//Si el archivo no existe:
+                    this.FileName = "page404.html";
+                    this.codeNumber = 404;
+                    this.response = "Not Found";
+                    pw.println(E404+ "<p>Elemento: "+ FileName +" NO EXISTE O FUE ELIMINADO</p>"
+                            + "</body></html>");//Se manda el encabezado y texto html de Error 404
+
+                    pw.flush();
+                }else { // Si la línea contiene: "?"
                     // Se envía únicamente header html
                     this.codeNumber = 200;
                     this.response = "OK";
-                    this.contentType = "text/html";
+                    String contentType = "text/html";
+                    String headerHTTP = "HTTP/1.1 "+ codeNumber +" "+response+"\n"
+                            + "Date: "+new Date()+"\n"
+                            + "Server: EGZ_KYF Server/1.0\n"
+                            + "Content-Type: "+contentType+" \n";
                     pw.println(headerHTTP);
                 }
                 pw.flush();
@@ -252,6 +291,9 @@ public class Server{
             void getFileName(String comando){//Actualiza la variable global FileName a partir del archivo solicitado
                 //Se usa la linea de petición que se le pasa como parámetro:
                 int i = comando.indexOf("/");
+                if(comando.indexOf("?")==(i+1)){
+                    i++;
+                }
                 int f = comando.indexOf(" ", i);
                 this.FileName = comando.substring(i + 1, f);
             }
@@ -259,8 +301,7 @@ public class Server{
                 try{
                    //Manejo del tipo de contenido: MIME:
                     int posExt = FileName.indexOf(".")+1;
-                    String ext = FileName.substring(posExt);//Se obtiene la extensión del archivo y 
-                    this.contentType = MIME.get(ext);//se actualiza contentType con el diccionario MIME
+                    String ext = FileName.substring(posExt);//Se obtiene la extensión del archivo y
 
                     int b_leidos;
                     BufferedInputStream bis2 = new BufferedInputStream(new FileInputStream(file));
@@ -271,7 +312,7 @@ public class Server{
                     String head = "HTTP/1.0 202 Accepted\n"
                                 + "Server: EGZ_KYF Server/1.0 \n"
                                 + "Date: " + new Date()+" \n"
-                                + "Content-Type: "+contentType+" \n"//Se utiliza el contentType obtenido con el diccionario MIME
+                                + "Content-Type: "+MIME.get(ext)+" \n"//Se utiliza el contentType obtenido con el diccionario MIME
                                 + "Content-Length: "+tam_archivo+" \n\n";
 
                     bos.write(head.getBytes());//Se escribe la cadena 
